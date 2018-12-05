@@ -5,7 +5,8 @@
 {
     'name': 'Purchase landed costs - Alternative option',
     'version': '11.0.1.0.0',
-    "author": "AvanzOSC,"
+    "author": "Devang Pipaliya, Dreambits Technologies Pvt. Ltd.,"
+              "AvanzOSC,"
               "Tecnativa,"
               "Joaquín Gutierrez,"
               "Odoo Community Association (OCA)",

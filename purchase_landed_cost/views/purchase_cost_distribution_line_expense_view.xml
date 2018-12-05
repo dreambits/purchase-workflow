@@ -37,6 +37,7 @@
                 <field name="distribution_expense" />
                 <group expand="0" string="Group By">
                     <filter name="group_by_picking" string="Picking" context="{'group_by': 'picking_id'}"/>
+                    <filter name="group_by_lot" string="Lot" context="{'group_by': 'lot_id'}"/>
                     <filter name="group_by_picking_date" string="Picking transfer date" context="{'group_by': 'picking_date_done'}"/>
                     <filter name="group_by_type" string="Expense type" context="{'group_by': 'type'}"/>
                 </group>

@@ -267,9 +267,9 @@ class PurchaseCostDistribution(models.Model):
             return
         d = {}
         for line in self.cost_lines:
-            product = line.move_id.product_id
+            product = line.move_id.move_id.product_id
             if (product.cost_method != 'average' or
-                    line.move_id.location_id.usage != 'supplier'):
+                    line.move_id.move_id.location_id.usage != 'supplier'):
                 continue
             d.setdefault(product, [])
             d[product].append(
@@ -297,12 +297,12 @@ class PurchaseCostDistribution(models.Model):
             return
         d = {}
         for line in self.cost_lines:
-            product = line.move_id.product_id
+            product = line.move_id.move_id.product_id
             if (product.cost_method != 'average' or
-                    line.move_id.location_id.usage != 'supplier'):
+                    line.move_id.move_id.location_id.usage != 'supplier'):
                 continue
             if self.currency_id.compare_amounts(
-                    line.move_id.price_unit,
+                    line.move_id.move_id.price_unit,
                     line.standard_price_new) != 0:
                 raise UserError(
                     _('Cost update cannot be undone because there has '
@@ -369,6 +369,7 @@ class PurchaseCostDistributionLine(models.Model):
     @api.multi
     @api.depends('distribution', 'distribution.name',
                  'picking_id', 'picking_id.name',
+                 'lot_id', 'lot_id.name',
                  'product_id', 'product_id.display_name')
     def _compute_name(self):
         for dist_line in self:
@@ -376,6 +377,11 @@ class PurchaseCostDistributionLine(models.Model):
                 dist_line.distribution.name, dist_line.picking_id.name,
                 dist_line.product_id.display_name,
             )
+            if dist_line.lot_id:
+                dist_line.name = "%s / %s" % (
+                    dist_line.name,
+                    dist_line.lot_id.name,
+                )
 
     @api.multi
     @api.depends('move_id', 'move_id.product_id')
@@ -386,19 +392,30 @@ class PurchaseCostDistributionLine(models.Model):
             dist_line.product_id = dist_line.move_id.product_id.id
 
     @api.multi
-    @api.depends('move_id', 'move_id.product_qty')
+    @api.depends('move_id', 'move_id.qty_done')
     def _get_product_qty(self):
         for dist_line in self:
             # Cannot be done via related
             #  field due to strange bug in update chain
-            dist_line.product_qty = dist_line.move_id.product_qty
+            dist_line.product_qty = dist_line.move_id.qty_done
+
+    @api.multi
+    @api.depends('move_id', 'move_id.lot_id')
+    def _get_product_lot(self):
+        for dist_line in self:
+            # Cannot be done via related
+            #  field due to strange bug in update chain
+            dist_line.lot_id = dist_line.move_id.lot_id and \
+                                    dist_line.move_id.lot_id.id or False
 
     @api.multi
     @api.depends('move_id')
     def _compute_standard_price_old(self):
         for dist_line in self:
             dist_line.standard_price_old = (
-                dist_line.move_id and dist_line.move_id._get_price_unit() or
+                dist_line.move_id and
+                dist_line.move_id.move_id and
+                dist_line.move_id.move_id._get_price_unit() or
                 0.0)
 
     name = fields.Char(
@@ -408,19 +425,21 @@ class PurchaseCostDistributionLine(models.Model):
         comodel_name='purchase.cost.distribution', string='Cost distribution',
         ondelete='cascade', required=True)
     move_id = fields.Many2one(
-        comodel_name='stock.move', string='Picking line', ondelete="restrict",
+        comodel_name='stock.move.line', string='Picking line', ondelete="restrict",
         required=True)
+    lot_id = fields.Many2one(
+        comodel_name='stock.production.lot', string='Lot')
     purchase_line_id = fields.Many2one(
         comodel_name='purchase.order.line', string='Purchase order line',
-        related='move_id.purchase_line_id')
+        related='move_id.move_id.purchase_line_id')
     purchase_id = fields.Many2one(
         comodel_name='purchase.order', string='Purchase order', readonly=True,
-        related='move_id.purchase_line_id.order_id', store=True)
+        related='move_id.move_id.purchase_line_id.order_id', store=True)
     partner = fields.Many2one(
         comodel_name='res.partner', string='Supplier', readonly=True,
-        related='move_id.purchase_line_id.order_id.partner_id')
+        related='move_id.move_id.purchase_line_id.order_id.partner_id')
     picking_id = fields.Many2one(
-        'stock.picking', string='Picking', related='move_id.picking_id',
+        'stock.picking', string='Picking', related='move_id.move_id.picking_id',
         store=True)
     product_id = fields.Many2one(
         comodel_name='product.product', string='Product', store=True,
@@ -429,9 +448,9 @@ class PurchaseCostDistributionLine(models.Model):
         string='Quantity', compute='_get_product_qty', store=True)
     product_uom = fields.Many2one(
         comodel_name='product.uom', string='Unit of measure',
-        related='move_id.product_uom')
+        related='move_id.move_id.product_uom')
     product_price_unit = fields.Float(
-        string='Unit price', related='move_id.price_unit')
+        string='Unit price', related='move_id.move_id.price_unit')
     expense_lines = fields.One2many(
         comodel_name='purchase.cost.distribution.line.expense',
         inverse_name='distribution_line', string='Expenses distribution lines')
@@ -480,6 +499,10 @@ class PurchaseCostDistributionLineExpense(models.Model):
     picking_id = fields.Many2one(
         comodel_name="stock.picking", store=True, readonly=True,
         related="distribution_line.picking_id",
+    )
+    lot_id = fields.Many2one(
+        comodel_name="stock.production.lot", store=True, readonly=True,
+        related="distribution_line.lot_id",
     )
     picking_date_done = fields.Datetime(
         related="picking_id.date_done", store=True, readonly=True,
